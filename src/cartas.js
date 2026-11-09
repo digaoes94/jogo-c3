@@ -60,7 +60,7 @@ export class Carta {
 export class Guerreiro extends Carta {
   constructor(elemento) {
     // Vida 12, Guarda 1, ATAQUE 5, Alcance 1
-    super(`Guerreiro de ${elemento}`, 12, 1, 5, 1); 
+    super(`Guerreiro de ${elemento}`, 12, 2, 5, 1); 
     this.aplicarElemento(elemento);
   }
 }
@@ -68,7 +68,7 @@ export class Guerreiro extends Carta {
 export class Arqueiro extends Carta {
   constructor(elemento) {
     // Vida 10, Guarda 2, ATAQUE 6, Alcance 3
-    super(`Arqueiro de ${elemento}`, 10, 2, 6, 3); 
+    super(`Arqueiro de ${elemento}`, 10, 1, 6, 3); 
     this.aplicarElemento(elemento);
   }
 }
