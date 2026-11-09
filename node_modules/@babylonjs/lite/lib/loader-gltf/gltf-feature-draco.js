@@ -1,0 +1,34 @@
+import { decodeDracoPrimitive, getDracoBufferViewBytes } from "./draco-decode.js";
+// src/loader-gltf/gltf-feature-draco.ts
+var TYPE_COMPONENT_COUNTS = {
+	SCALAR: 1,
+	VEC2: 2,
+	VEC3: 3,
+	VEC4: 4,
+	MAT2: 4,
+	MAT3: 9,
+	MAT4: 16
+};
+var feature = {
+	id: "KHR_draco_mesh_compression",
+	async preMesh(jsonIn, binChunk) {
+		const json = jsonIn;
+		const out = /* @__PURE__ */ new Map();
+		for (const mesh of json.meshes ?? []) for (const primitive of mesh.primitives ?? []) {
+			const ext = primitive.extensions?.KHR_draco_mesh_compression;
+			if (!ext) continue;
+			const bytes = getDracoBufferViewBytes(json, binChunk, ext.bufferView);
+			const accessorTypes = {};
+			for (const name of Object.keys(ext.attributes)) {
+				const accIdx = primitive.attributes?.[name];
+				if (accIdx !== void 0 && json.accessors?.[accIdx]) accessorTypes[name] = TYPE_COMPONENT_COUNTS[json.accessors[accIdx].type] ?? 3;
+			}
+			const decoded = await decodeDracoPrimitive(bytes, ext.attributes, accessorTypes);
+			out.set(primitive, decoded);
+		}
+		return out;
+	}
+};
+export { feature as default };
+
+//# sourceMappingURL=gltf-feature-draco.js.map

@@ -1,0 +1,1 @@
+{"version":3,"file":"multiply-block.js","names":[],"sources":["../../../../../src/material/node/blocks/multiply-block.ts"],"sourcesContent":["import { binaryEmitter } from \"./_math-factory.js\";\nexport const emitter = binaryEmitter(\"MultiplyBlock\", (l, r) => `${l} * ${r}`);\n"],"mappings":";;AACA,IAAa,UAAU,cAAc,kBAAkB,GAAG,MAAM,GAAG,EAAE,KAAK,GAAG"}

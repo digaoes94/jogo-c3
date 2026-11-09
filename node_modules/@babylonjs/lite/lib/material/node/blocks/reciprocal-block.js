@@ -1,0 +1,18 @@
+// src/material/node/blocks/reciprocal-block.ts
+var emitter = {
+	className: "ReciprocalBlock",
+	emit(block, _outputName, stage, state, ctx) {
+		const input = ctx.resolve(block, "input", stage, state);
+		if (input.type === "mat4f") return {
+			expr: `inverse(${input.expr})`,
+			type: "mat4f"
+		};
+		return {
+			expr: `(1.0 / ${input.expr})`,
+			type: input.type
+		};
+	}
+};
+export { emitter };
+
+//# sourceMappingURL=reciprocal-block.js.map

@@ -1,0 +1,19 @@
+// src/loader-gltf/gltf-light-pointer-state.ts
+var _lightsByJson = null;
+function map() {
+	return _lightsByJson ??= /* @__PURE__ */ new WeakMap();
+}
+function setGltfPunctualLight(json, lightIndex, light) {
+	let lights = map().get(json);
+	if (!lights) {
+		lights = [];
+		map().set(json, lights);
+	}
+	lights[lightIndex] = light;
+}
+function getGltfPunctualLight(json, lightIndex) {
+	return json ? _lightsByJson?.get(json)?.[lightIndex] : void 0;
+}
+export { getGltfPunctualLight, setGltfPunctualLight };
+
+//# sourceMappingURL=gltf-light-pointer-state.js.map

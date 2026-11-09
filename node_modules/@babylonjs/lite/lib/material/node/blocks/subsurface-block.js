@@ -1,0 +1,15 @@
+// src/material/node/blocks/subsurface-block.ts
+var emitter = {
+	className: "SubSurfaceBlock",
+	stage: "fragment",
+	emit(_block, _outputName, _stage, state, _ctx) {
+		state.usesSubsurface = true;
+		return {
+			expr: `vec3<f32>(0.0)`,
+			type: "vec3f"
+		};
+	}
+};
+export { emitter };
+
+//# sourceMappingURL=subsurface-block.js.map

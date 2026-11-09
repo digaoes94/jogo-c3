@@ -1,0 +1,139 @@
+import { F32, U32, U8 } from "../engine/typed-arrays.js";
+import { BU } from "../engine/gpu-flags.js";
+import { createMappedBuffer } from "../resource/mapped-buffer.js";
+import { createUniformBuffer } from "../resource/uniform-buffer.js";
+import { getPickVertexDataBinding, getPickingPipelineSet, getPickingRegularPipeline, getPickingThinInstancePipeline, validatePickingVertexFormat } from "./picking-advanced-pipeline.js";
+// src/picking/picking-advanced-draw.ts
+var _scratch = /* @__PURE__ */ new ArrayBuffer(80);
+var _f32 = new F32(_scratch);
+var _u32 = new U32(_scratch);
+var _view = new U8(_scratch);
+function ignoredRange(ignore) {
+	if (ignore?.thinInstanceRange) return [Math.max(0, ignore.thinInstanceRange.start | 0), Math.max(0, ignore.thinInstanceRange.count | 0)];
+	return ignore?.thinInstanceIndex === void 0 ? [0, 0] : [Math.max(0, ignore.thinInstanceIndex | 0), 1];
+}
+function discardGroup(engine, layout, rule, mesh, temporary) {
+	if (!rule.storage?.length) return null;
+	const entries = [];
+	for (let i = 0; i < rule.storage.length; i++) {
+		const data = rule.storage[i].data(mesh);
+		if (!data) return null;
+		const buffer = createMappedBuffer(engine, data, BU.STORAGE, "pick-discard-storage");
+		temporary.push(buffer);
+		entries.push({
+			binding: i,
+			resource: { buffer }
+		});
+	}
+	return engine._device.createBindGroup({
+		layout,
+		entries
+	});
+}
+async function prepareAdvancedDraw(engine, candidates) {
+	for (const { mesh } of candidates) if (!mesh.thinInstances || mesh.thinInstances.count > 0 && mesh.thinInstances._gpuBuffer) validatePickingVertexFormat(mesh, "position");
+	const vat = candidates.some((candidate) => !!candidate.mesh.vat) ? await import("./vat-picking-pipeline.js") : null;
+	const deform = candidates.some((candidate) => !candidate.mesh.vat && (candidate.mesh.morphTargets || candidate.mesh.skeleton)) ? await import("./deform-picking-projection.js") : null;
+	return { draw(pass, sceneBG, startId, rule, detailed, detail, temporary, detailedPositions, detailedNormals) {
+		let nextId = startId;
+		const ranges = [];
+		for (const candidate of candidates) {
+			const mesh = candidate.mesh;
+			const gpu = mesh._gpu;
+			const ti = mesh.thinInstances;
+			const vatProjection = vat?.getVatPickingProjection(engine, mesh) ?? null;
+			const projection = vatProjection ?? deform?.getDeformPickingProjection(engine, mesh) ?? null;
+			const defaults = getPickingPipelineSet(engine, null, detailed, projection);
+			const discarded = rule ? getPickingPipelineSet(engine, rule, detailed, projection) : null;
+			const discardBG = rule && discarded?.discardBGL ? discardGroup(engine, discarded.discardBGL, rule, mesh, temporary) : null;
+			const set = discarded && (!discarded.discardBGL || discardBG) ? discarded : defaults;
+			const activeRule = set === discarded ? rule : null;
+			const position = gpu.positionBuffer;
+			if (detailedPositions && mesh._cpuPositions) detailedPositions.set(mesh, mesh._cpuPositions);
+			if (detailedNormals && mesh._cpuNormals) detailedNormals.set(mesh, mesh._cpuNormals);
+			const world = detail ? detail.copyDetailedWorldMatrix(mesh.worldMatrix) : null;
+			_f32.set(mesh.worldMatrix, 0);
+			_u32[16] = nextId;
+			if (ti) {
+				if (ti.count <= 0 || !ti._gpuBuffer) continue;
+				const [ignoredStart, ignoredCount] = ignoredRange(candidate.ignore);
+				_u32[17] = ignoredStart;
+				_u32[18] = ignoredCount;
+				const ubo = createUniformBuffer(engine, _view, "pick-thin-instance-ubo");
+				temporary.push(ubo);
+				const interleave = gpu._vbLayout?.position;
+				const pipeline = getPickingThinInstancePipeline(engine, set, activeRule, interleave);
+				pass.setPipeline(pipeline);
+				pass.setBindGroup(0, sceneBG);
+				pass.setBindGroup(1, engine._device.createBindGroup({
+					layout: pipeline.getBindGroupLayout(1),
+					entries: [{
+						binding: 0,
+						resource: { buffer: ubo }
+					}, {
+						binding: 1,
+						resource: { buffer: ti._gpuBuffer }
+					}]
+				}));
+				if (discardBG) pass.setBindGroup(2, discardBG);
+				pass.setVertexBuffer(0, position);
+				if (vatProjection && vat) vat.bindVatPickingProjection(engine, pass, pipeline, mesh, true, 1);
+				else if (projection && deform) deform.bindDeformPickingProjection(engine, pass, pipeline, mesh, 1, !!discardBG);
+				pass.setIndexBuffer(gpu.indexBuffer, gpu.indexFormat);
+				pass.drawIndexed(gpu.indexCount, ti.count, gpu._firstIndex ?? 0, gpu._baseVertex);
+				ranges.push({
+					base: nextId,
+					count: ti.count,
+					mesh,
+					thin: true,
+					world,
+					thinVersion: ti._version,
+					worldAdjusted: !!activeRule?.worldAdjustWgsl || !!vatProjection
+				});
+				nextId += ti.count;
+				continue;
+			}
+			const ubo = createUniformBuffer(engine, _view, "pick-mesh-ubo");
+			temporary.push(ubo);
+			const vertexData = activeRule?.vertexData ? getPickVertexDataBinding(mesh, activeRule.vertexData) : null;
+			const interleave = gpu._vbLayout?.position;
+			const pipeline = getPickingRegularPipeline(engine, set, activeRule, interleave, vertexData && activeRule?.vertexData ? {
+				attribute: activeRule.vertexData,
+				interleave: vertexData.interleave
+			} : null);
+			pass.setPipeline(pipeline);
+			pass.setBindGroup(0, sceneBG);
+			pass.setBindGroup(1, engine._device.createBindGroup({
+				layout: pipeline.getBindGroupLayout(1),
+				entries: [{
+					binding: 0,
+					resource: { buffer: ubo }
+				}]
+			}));
+			if (discardBG) pass.setBindGroup(2, discardBG);
+			pass.setVertexBuffer(0, position);
+			if (vertexData) pass.setVertexBuffer(1, vertexData.buffer);
+			if (vatProjection && vat) vat.bindVatPickingProjection(engine, pass, pipeline, mesh, false, vertexData ? 2 : 1);
+			else if (projection && deform) deform.bindDeformPickingProjection(engine, pass, pipeline, mesh, vertexData ? 2 : 1, !!discardBG);
+			pass.setIndexBuffer(gpu.indexBuffer, gpu.indexFormat);
+			pass.drawIndexed(gpu.indexCount, 1, gpu._firstIndex ?? 0, gpu._baseVertex);
+			ranges.push({
+				base: nextId,
+				count: 1,
+				mesh,
+				thin: false,
+				world,
+				thinVersion: 0,
+				worldAdjusted: !!activeRule?.worldAdjustWgsl || !!vatProjection
+			});
+			nextId++;
+		}
+		return {
+			nextId,
+			ranges
+		};
+	} };
+}
+export { prepareAdvancedDraw };
+
+//# sourceMappingURL=picking-advanced-draw.js.map

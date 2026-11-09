@@ -1,0 +1,1 @@
+{"version":3,"file":"mod-block.js","names":[],"sources":["../../../../../src/material/node/blocks/mod-block.ts"],"sourcesContent":["import { binaryEmitter } from \"./_math-factory.js\";\n\nexport const emitter = binaryEmitter(\"ModBlock\", (l, r) => `${l} % ${r}`);\n"],"mappings":";;AAEA,IAAa,UAAU,cAAc,aAAa,GAAG,MAAM,GAAG,EAAE,KAAK,GAAG"}

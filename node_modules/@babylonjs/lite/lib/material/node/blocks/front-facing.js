@@ -1,0 +1,14 @@
+// src/material/node/blocks/front-facing.ts
+var emitter = {
+	className: "FrontFacingBlock",
+	stage: "fragment",
+	emit(_block, _outputName, _stage, _state, _ctx) {
+		return {
+			expr: "select(0.0, 1.0, _NME_FRONT_FACING_)",
+			type: "f32"
+		};
+	}
+};
+export { emitter };
+
+//# sourceMappingURL=front-facing.js.map

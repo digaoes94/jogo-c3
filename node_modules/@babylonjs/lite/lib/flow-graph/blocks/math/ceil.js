@@ -1,0 +1,20 @@
+import { FgBlockType } from "../../block-type.js";
+import { FgType } from "../../types.js";
+import { getDataValue, setDataValue } from "../../runtime.js";
+import { sockIn, sockOut } from "../../sockets.js";
+import { fgCeil } from "../../fg-math.js";
+// src/flow-graph/blocks/math/ceil.ts
+var ceilDef = {
+	type: FgBlockType.Ceil,
+	build: () => ({
+		dataIn: [sockIn("a", FgType.Any)],
+		dataOut: [sockOut("value", FgType.Any)]
+	}),
+	updateOutputs(block, ctx, env) {
+		const a = getDataValue(ctx, env, block, "a");
+		setDataValue(ctx, block, "value", fgCeil(a));
+	}
+};
+export { ceilDef };
+
+//# sourceMappingURL=ceil.js.map

@@ -1,0 +1,20 @@
+import { setSubtreeVisible } from "../scene/visibility.js";
+// src/loader-gltf/gltf-ext-node-visibility.ts
+function applyVisibility(json, nodeMap) {
+	const nodes = json.nodes ?? [];
+	for (let i = 0; i < nodes.length; i++) {
+		const vis = nodes[i]?.extensions?.KHR_node_visibility?.visible;
+		const sn = nodeMap[i];
+		if (vis === false && sn) setSubtreeVisible(sn, false);
+	}
+}
+var ext = {
+	id: "KHR_node_visibility",
+	async applyAsset(_meshes, _root, ctx) {
+		if (ctx._nodeMap) applyVisibility(ctx._json, ctx._nodeMap);
+		return {};
+	}
+};
+export { ext as default };
+
+//# sourceMappingURL=gltf-ext-node-visibility.js.map

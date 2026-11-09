@@ -1,0 +1,1 @@
+{"version":3,"file":"max-block.js","names":[],"sources":["../../../../../src/material/node/blocks/max-block.ts"],"sourcesContent":["import { binaryEmitter } from \"./_math-factory.js\";\nexport const emitter = binaryEmitter(\"MaxBlock\", (l, r) => `max(${l}, ${r})`);\n"],"mappings":";;AACA,IAAa,UAAU,cAAc,aAAa,GAAG,MAAM,OAAO,EAAE,IAAI,EAAE,EAAE"}

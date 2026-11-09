@@ -1,0 +1,15 @@
+// src/material/node/blocks/reflection-block.ts
+var emitter = {
+	className: "ReflectionBlock",
+	stage: "fragment",
+	emit(_block, _outputName, _stage, state, _ctx) {
+		state.usesEnv = true;
+		return {
+			expr: `vec3<f32>(0.0)`,
+			type: "vec3f"
+		};
+	}
+};
+export { emitter };
+
+//# sourceMappingURL=reflection-block.js.map

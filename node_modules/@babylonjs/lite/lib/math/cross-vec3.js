@@ -1,0 +1,12 @@
+// src/math/cross-vec3.ts
+/** Compute the right-handed cross product `a x b`. */
+function crossVec3(a, b) {
+	return {
+		x: a.y * b.z - a.z * b.y,
+		y: a.z * b.x - a.x * b.z,
+		z: a.x * b.y - a.y * b.x
+	};
+}
+export { crossVec3 };
+
+//# sourceMappingURL=cross-vec3.js.map

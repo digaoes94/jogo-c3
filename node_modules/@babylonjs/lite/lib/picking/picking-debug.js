@@ -1,0 +1,39 @@
+// src/picking/picking-debug.ts
+function tracePick(label, input, ray, pickId, depth, hit, unresolved = false, mesh = "", thinInstanceIndex = -1, info) {
+	const [x, y, pickX, pickY, px, py, backingWidth, backingHeight, clientWidth, clientHeight, viewportX, viewportY, viewportWidth, viewportHeight] = input;
+	console.trace("pick-debug", {
+		label,
+		input: {
+			x,
+			y,
+			pickX,
+			pickY,
+			px,
+			py,
+			backingWidth,
+			backingHeight,
+			clientWidth,
+			clientHeight,
+			viewport: {
+				x: viewportX,
+				y: viewportY,
+				width: viewportWidth,
+				height: viewportHeight
+			}
+		},
+		ray,
+		pickId,
+		depth,
+		hit,
+		...unresolved ? { unresolved: true } : {},
+		...hit ? {
+			mesh,
+			thinInstanceIndex,
+			pickedPoint: info?.pickedPoint,
+			distance: info?.distance
+		} : {}
+	});
+}
+export { tracePick };
+
+//# sourceMappingURL=picking-debug.js.map

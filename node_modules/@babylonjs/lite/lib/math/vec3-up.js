@@ -1,0 +1,10 @@
+// src/math/vec3-up.ts
+/** Unit vector pointing up on the positive Y axis. */
+var Vec3Up = {
+	x: 0,
+	y: 1,
+	z: 0
+};
+export { Vec3Up };
+
+//# sourceMappingURL=vec3-up.js.map

@@ -1,0 +1,34 @@
+// src/material/node/blocks/mesh-attribute-exists-block.ts
+function attributeFlag(attributeType) {
+	switch (attributeType) {
+		case 1: return "1.0";
+		case 2: return "meshU.receivesShadow.z";
+		case 3: return "meshU.receivesShadow.w";
+		case 4: return "meshU.receivesShadow.y";
+		case 5: return "0.0";
+		case 6:
+		case 7:
+		case 8:
+		case 9: return "0.0";
+		default: return null;
+	}
+}
+var emitter = {
+	className: "MeshAttributeExistsBlock",
+	emit(block, _outputName, stage, state, ctx) {
+		state.usesMeshAttributeExists = true;
+		const input = ctx.resolve(block, "input", stage, state);
+		const flag = attributeFlag(block.serialized["attributeType"] ?? 0);
+		if (flag === null) return input;
+		const fallback = ctx.cast(ctx.resolve(block, "fallback", stage, state), input.type);
+		const expr = ctx.temp(state, "attr");
+		(stage === "vertex" ? state.vertex : state.fragment).body.push(`let ${expr} =select(${fallback.expr},${input.expr},${flag} >0.5);`);
+		return {
+			expr,
+			type: input.type
+		};
+	}
+};
+export { emitter };
+
+//# sourceMappingURL=mesh-attribute-exists-block.js.map

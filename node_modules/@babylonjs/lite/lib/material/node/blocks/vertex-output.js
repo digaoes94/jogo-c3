@@ -1,0 +1,17 @@
+// src/material/node/blocks/vertex-output.ts
+var emitter = {
+	className: "VertexOutputBlock",
+	stage: "vertex",
+	emit(block, _outputName, _stage, state, ctx) {
+		const vector = ctx.resolve(block, "vector", "vertex", state);
+		const pos = ctx.cast(vector, "vec4f").expr;
+		state.vertex.body.push(`_NME_VTX_OUTPUT_= ${pos};`);
+		return {
+			expr: pos,
+			type: "vec4f"
+		};
+	}
+};
+export { emitter };
+
+//# sourceMappingURL=vertex-output.js.map

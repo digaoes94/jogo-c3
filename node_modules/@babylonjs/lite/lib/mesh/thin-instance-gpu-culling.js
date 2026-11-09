@@ -1,0 +1,527 @@
+import { F32, U32 } from "../engine/typed-arrays.js";
+import { getViewProjectionMatrix } from "../camera/camera.js";
+import { BU } from "../engine/gpu-flags.js";
+import { bumpVisibilityEpoch } from "../engine/engine.js";
+import { retireGpuResources } from "../engine/gpu-resource-retirement.js";
+import { enableDrawBatchCollection } from "../render/draw-update-batches.js";
+import { writeMeshIndexedIndirectArgs } from "./mesh-indexed-indirect.js";
+import { syncThinInstanceGpuData } from "./thin-instance-gpu.js";
+// src/mesh/thin-instance-gpu-culling.ts
+/** GPU frustum culling for opt-in thin instances.
+*
+* Dynamically imported only when a scene enables thin-instance GPU culling.
+* Each render binding owns its own state so render tasks with different cameras
+* never clobber one another's compacted instance buffers or indirect args.
+*/
+var WORKGROUP_SIZE = 64;
+var PARAM_BYTES = 192;
+var LOD_PARAM_BYTES = 224;
+var COUNT_U32_OFFSET = 44;
+var MESH_WORLD_FLOAT_OFFSET = 24;
+var LOCAL_SPHERE_FLOAT_OFFSET = 40;
+var BOUNDS_PAD_F32_OFFSET = 45;
+var CAM_POS_DIST_F32_OFFSET = 48;
+var LOD_BAND_F32_OFFSET = 52;
+var INDIRECT_ARGS_BYTES = 20;
+var CULL_WGSL_NO_COLOR = `struct CullParams{planes:array<vec4<f32>,6>,meshWorld:mat4x4<f32>,localSphere:vec4<f32>,count:u32,boundsPad:f32};@group(0)@binding(0)var<storage,read>srcMatrices:array<mat4x4<f32>>;@group(0)@binding(1)var<storage,read_write>dstMatrices:array<mat4x4<f32>>;@group(0)@binding(2)var<storage,read_write>args:array<atomic<u32>>;@group(0)@binding(3)var<uniform>params:CullParams;fn visible(world:mat4x4<f32>)->bool{let center=(world*vec4<f32>(params.localSphere.xyz,1.0)).xyz;let sx=length(world[0].xyz);let sy=length(world[1].xyz);let sz=length(world[2].xyz);let radius=params.localSphere.w*max(max(sx,sy),sz)+params.boundsPad+0.0001;for(var i=0u;i<6u;i++){let p=params.planes[i];if(dot(p.xyz,center)+p.w<-radius){return false;}}return true;}@compute@workgroup_size(64)fn main(@builtin(global_invocation_id)gid:vec3<u32>){let i=gid.x;if(i>=params.count){return;}let world=params.meshWorld*srcMatrices[i];if(!visible(world)){return;}let outIndex=atomicAdd(&args[1],1u);dstMatrices[outIndex]=srcMatrices[i];}`;
+var CULL_WGSL_COLOR = `${CULL_WGSL_NO_COLOR} @group(0)@binding(4)var<storage,read>srcColors:array<vec4<f32>>;@group(0)@binding(5)var<storage,read_write>dstColors:array<vec4<f32>>;@compute@workgroup_size(64)fn mainColor(@builtin(global_invocation_id)gid:vec3<u32>){let i=gid.x;if(i>=params.count){return;}let world=params.meshWorld*srcMatrices[i];if(!visible(world)){return;}let outIndex=atomicAdd(&args[1],1u);dstMatrices[outIndex]=srcMatrices[i];dstColors[outIndex]=srcColors[i];}`;
+var CULL_WGSL_LOD_NO_COLOR = `struct CullParams{planes:array<vec4<f32>,6>,meshWorld:mat4x4<f32>,localSphere:vec4<f32>,count:u32,boundsPad:f32,camPosDist:vec4<f32>,lodBand:f32};@group(0)@binding(0)var<storage,read>srcMatrices:array<mat4x4<f32>>;@group(0)@binding(1)var<storage,read_write>dstMatrices:array<mat4x4<f32>>;@group(0)@binding(2)var<storage,read_write>args:array<atomic<u32>>;@group(0)@binding(3)var<uniform>params:CullParams;@group(0)@binding(6)var<storage,read_write>lodMatrices:array<mat4x4<f32>>;@group(0)@binding(7)var<storage,read_write>lodArgs:array<atomic<u32>>;fn visible(world:mat4x4<f32>)->bool{let center=(world*vec4<f32>(params.localSphere.xyz,1.0)).xyz;let sx=length(world[0].xyz);let sy=length(world[1].xyz);let sz=length(world[2].xyz);let radius=params.localSphere.w*max(max(sx,sy),sz)+params.boundsPad+0.0001;for(var i=0u;i<6u;i++){let p=params.planes[i];if(dot(p.xyz,center)+p.w<-radius){return false;}}return true;}fn isNear(world:mat4x4<f32>,i:u32)->bool{let center=(world*vec4<f32>(params.localSphere.xyz,1.0)).xyz;var h=i*747796405u+2891336453u;h=((h>>((h>>28u)+4u))^h)*277803737u;h=(h>>22u)^h;let dither=(f32(h)*(1.0/4294967295.0)-0.5)*params.lodBand;return distance(center,params.camPosDist.xyz)<params.camPosDist.w+dither;}@compute@workgroup_size(64)fn mainLod(@builtin(global_invocation_id)gid:vec3<u32>){let i=gid.x;if(i>=params.count){return;}let world=params.meshWorld*srcMatrices[i];if(!visible(world)){return;}if(isNear(world,i)){let outIndex=atomicAdd(&args[1],1u);dstMatrices[outIndex]=srcMatrices[i];}else{let outIndex=atomicAdd(&lodArgs[1],1u);lodMatrices[outIndex]=srcMatrices[i];}}`;
+var CULL_WGSL_LOD_COLOR = `${CULL_WGSL_LOD_NO_COLOR} @group(0)@binding(4)var<storage,read>srcColors:array<vec4<f32>>;@group(0)@binding(5)var<storage,read_write>dstColors:array<vec4<f32>>;@group(0)@binding(8)var<storage,read_write>lodColors:array<vec4<f32>>;@compute@workgroup_size(64)fn mainLodColor(@builtin(global_invocation_id)gid:vec3<u32>){let i=gid.x;if(i>=params.count){return;}let world=params.meshWorld*srcMatrices[i];if(!visible(world)){return;}if(isNear(world,i)){let outIndex=atomicAdd(&args[1],1u);dstMatrices[outIndex]=srcMatrices[i];dstColors[outIndex]=srcColors[i];}else{let outIndex=atomicAdd(&lodArgs[1],1u);lodMatrices[outIndex]=srcMatrices[i];lodColors[outIndex]=srcColors[i];}}`;
+var _cachedDevice = null;
+var _pipelineNoColor = null;
+var _pipelineColor = null;
+var _pipelineLodNoColor = null;
+var _pipelineLodColor = null;
+var _dispatchBatches = null;
+/** @internal Return the compute batch associated with one render task. */
+function getComputeDispatchBatch(signature) {
+	enableDrawBatchCollection(signature);
+	_dispatchBatches ??= /* @__PURE__ */ new WeakMap();
+	const cached = _dispatchBatches.get(signature);
+	if (cached && !cached._retired) return cached;
+	const dispatches = [];
+	let count = 0;
+	const batch = {
+		_retired: false,
+		reset() {
+			count = 0;
+		},
+		flush(engine) {
+			if (count === 0) return;
+			const pass = engine._currentEncoder.beginComputePass();
+			let lastPipeline = null;
+			for (let i = 0; i < count; i++) {
+				const dispatch = dispatches[i];
+				if (dispatch.pipeline !== lastPipeline) {
+					pass.setPipeline(dispatch.pipeline);
+					lastPipeline = dispatch.pipeline;
+				}
+				pass.setBindGroup(0, dispatch.bindGroup);
+				pass.dispatchWorkgroups(dispatch.workgroupsX);
+			}
+			pass.end();
+		},
+		destroy() {
+			batch._retired = true;
+			dispatches.length = 0;
+			count = 0;
+			if (_dispatchBatches?.get(signature) === batch) _dispatchBatches.delete(signature);
+		},
+		queue(dispatch) {
+			dispatches[count++] = dispatch;
+		}
+	};
+	_dispatchBatches.set(signature, batch);
+	return batch;
+}
+/** Create per-binding culling state. */
+function createTiCullState() {
+	const paramsBytes = /* @__PURE__ */ new ArrayBuffer(LOD_PARAM_BYTES);
+	return {
+		_capacity: 0,
+		_visibleMatrixBuffer: null,
+		_visibleColorBuffer: null,
+		_argsBuffer: null,
+		_paramsBuffer: null,
+		_bindGroup: null,
+		_srcMatrixBuffer: null,
+		_srcColorBuffer: null,
+		_hasColor: false,
+		_localSphereReady: false,
+		_localSphere: new F32(4),
+		_paramsBytes: paramsBytes,
+		_paramsF32: new F32(paramsBytes),
+		_paramsU32: new U32(paramsBytes),
+		_argsData: new U32(5),
+		_drawBuffers: null,
+		_indexCount: -1,
+		_baseVertex: -1,
+		_active: false,
+		_lodActive: false,
+		_lodMatrixBuffer: null,
+		_lodColorBuffer: null,
+		_lodArgsBuffer: null,
+		_lodIndexCount: -1,
+		_lodBaseVertex: -1,
+		_lodArgsZeroed: false
+	};
+}
+/** Destroy GPU resources owned by a per-binding cull state. */
+function destroyTiCullState(state) {
+	state._visibleMatrixBuffer?.destroy();
+	state._visibleColorBuffer?.destroy();
+	state._argsBuffer?.destroy();
+	state._paramsBuffer?.destroy();
+	state._lodMatrixBuffer?.destroy();
+	state._lodColorBuffer?.destroy();
+	state._lodArgsBuffer?.destroy();
+	state._visibleMatrixBuffer = null;
+	state._visibleColorBuffer = null;
+	state._argsBuffer = null;
+	state._paramsBuffer = null;
+	state._lodMatrixBuffer = null;
+	state._lodColorBuffer = null;
+	state._lodArgsBuffer = null;
+	state._bindGroup = null;
+	state._drawBuffers = null;
+}
+/** Run culling for one render binding and return buffers for the subsequent indirect draw. */
+function prepareTiCull(engine, state, mesh, gpu, ti, hasColor, context, dispatchBatch, lodMesh) {
+	const camera = context._camera;
+	if (!ti._gpuCullingEnabled || !camera || mesh.visible === false || ti.count === 0) return cullFallback(engine, state);
+	if (hasColor && !ti.colors) return cullFallback(engine, state);
+	const positions = mesh._cpuPositions;
+	const hasPositions = positions && positions.length >= 3;
+	const boundsChanged = hasPositions ? state._localBoundMin !== mesh.boundMin || state._localBoundMax !== mesh.boundMax : !sameBounds(state._localBoundMin, mesh.boundMin) || !sameBounds(state._localBoundMax, mesh.boundMax);
+	if (!state._localSphereReady || state._localPositions !== positions || boundsChanged) {
+		if (!computeLocalSphere(mesh, state._localSphere)) {
+			state._localSphereReady = false;
+			return cullFallback(engine, state);
+		}
+		state._localSphereReady = true;
+		const reuseBounds = (state._localPositions?.length ?? 0) < 3;
+		state._localBoundMin = !hasPositions ? copyBounds(mesh.boundMin, state._localBoundMin, reuseBounds) : mesh.boundMin;
+		state._localBoundMax = !hasPositions ? copyBounds(mesh.boundMax, state._localBoundMax, reuseBounds) : mesh.boundMax;
+		state._localPositions = positions;
+	}
+	syncThinInstanceGpuData(engine, ti, hasColor);
+	const sourceMatrixBuffer = ti._gpuBuffer;
+	const sourceColorBuffer = hasColor ? ti._colorGpuBuffer : null;
+	if (!sourceMatrixBuffer || hasColor && !sourceColorBuffer) return cullFallback(engine, state);
+	const lod = lodMesh ?? null;
+	ensureCullBuffers(engine, state, ti._capacity, hasColor, lod !== null);
+	const visibleMatrixBuffer = state._visibleMatrixBuffer;
+	const visibleColorBuffer = hasColor ? state._visibleColorBuffer : null;
+	const argsBuffer = state._argsBuffer;
+	const paramsBuffer = state._paramsBuffer;
+	const pipeline = getCullPipeline(engine, hasColor, lod !== null);
+	if (state._bindGroup === null || state._srcMatrixBuffer !== sourceMatrixBuffer || state._srcColorBuffer !== sourceColorBuffer || state._hasColor !== hasColor) {
+		const entries = [
+			{
+				binding: 0,
+				resource: { buffer: sourceMatrixBuffer }
+			},
+			{
+				binding: 1,
+				resource: { buffer: visibleMatrixBuffer }
+			},
+			{
+				binding: 2,
+				resource: { buffer: argsBuffer }
+			},
+			{
+				binding: 3,
+				resource: { buffer: paramsBuffer }
+			}
+		];
+		if (hasColor) entries.push({
+			binding: 4,
+			resource: { buffer: sourceColorBuffer }
+		}, {
+			binding: 5,
+			resource: { buffer: visibleColorBuffer }
+		});
+		if (lod) {
+			entries.push({
+				binding: 6,
+				resource: { buffer: state._lodMatrixBuffer }
+			}, {
+				binding: 7,
+				resource: { buffer: state._lodArgsBuffer }
+			});
+			if (hasColor) entries.push({
+				binding: 8,
+				resource: { buffer: state._lodColorBuffer }
+			});
+		}
+		state._bindGroup = engine._device.createBindGroup({
+			layout: pipeline.getBindGroupLayout(0),
+			entries
+		});
+		state._srcMatrixBuffer = sourceMatrixBuffer;
+		state._srcColorBuffer = sourceColorBuffer;
+		state._hasColor = hasColor;
+	}
+	const v = camera.viewport;
+	const aspect = context.targetWidth / context.targetHeight * (v ? v.width / v.height : 1);
+	writeCullParams(engine, state, mesh, gpu, ti.count, camera, aspect, lod);
+	const dispatch = {
+		pipeline,
+		bindGroup: state._bindGroup,
+		workgroupsX: Math.ceil(ti.count / WORKGROUP_SIZE)
+	};
+	if (dispatchBatch) dispatchBatch.queue(dispatch);
+	else {
+		const pass = engine._currentEncoder.beginComputePass();
+		pass.setPipeline(pipeline);
+		pass.setBindGroup(0, state._bindGroup);
+		pass.dispatchWorkgroups(dispatch.workgroupsX);
+		pass.end();
+	}
+	state._drawBuffers = {
+		matrixBuffer: visibleMatrixBuffer,
+		colorBuffer: visibleColorBuffer
+	};
+	setCullActive(state, true);
+	if (lod) return {
+		drawBuffers: state._drawBuffers,
+		argsBuffer,
+		lodDrawBuffers: {
+			matrixBuffer: state._lodMatrixBuffer,
+			colorBuffer: hasColor ? state._lodColorBuffer : null
+		},
+		lodArgsBuffer: state._lodArgsBuffer
+	};
+	return {
+		drawBuffers: state._drawBuffers,
+		argsBuffer
+	};
+}
+/** Shared early-out: deactivate culling for this pass. When the mesh has (or had) a LOD partner, the
+*  partner's far-bucket args are zeroed so even a stale recorded indirect draw renders zero instances —
+*  the full mesh's non-culled fallback then draws ALL instances without ever double-drawing the far set. */
+function cullFallback(engine, state) {
+	if (state._lodArgsBuffer && !state._lodArgsZeroed) {
+		engine._currentEncoder.clearBuffer(state._lodArgsBuffer, 4, 4);
+		state._lodArgsZeroed = true;
+	}
+	setCullActive(state, false);
+	state._drawBuffers = null;
+	return null;
+}
+/** @internal Publish (or withdraw) one pass's far-bucket outputs for the LOD partner's binding. */
+function publishTiLodBucket(ti, signature, result) {
+	const lodDrawBuffers = result?.lodDrawBuffers;
+	const lodArgsBuffer = result?.lodArgsBuffer;
+	const buckets = ti._lodBuckets;
+	if (lodDrawBuffers && lodArgsBuffer && buckets) {
+		let bucket = buckets.get(signature);
+		if (!bucket) {
+			bucket = {
+				matrixBuffer: lodDrawBuffers.matrixBuffer,
+				colorBuffer: lodDrawBuffers.colorBuffer,
+				argsBuffer: lodArgsBuffer,
+				active: true
+			};
+			buckets.set(signature, bucket);
+			return;
+		}
+		bucket.matrixBuffer = lodDrawBuffers.matrixBuffer;
+		bucket.colorBuffer = lodDrawBuffers.colorBuffer;
+		bucket.argsBuffer = lodArgsBuffer;
+		bucket.active = true;
+		return;
+	}
+	const bucket = ti._lodBuckets?.get(signature);
+	if (bucket) bucket.active = false;
+}
+function ensureCullBuffers(engine, state, capacity, hasColor, lod) {
+	const device = engine._device;
+	if (state._lodActive !== lod) {
+		state._paramsBuffer?.destroy();
+		state._paramsBuffer = null;
+		state._bindGroup = null;
+		if (!lod) {
+			const lodMat = state._lodMatrixBuffer;
+			const lodCol = state._lodColorBuffer;
+			const lodArgs = state._lodArgsBuffer;
+			if (lodArgs && !state._lodArgsZeroed) engine._currentEncoder.clearBuffer(lodArgs, 4, 4);
+			if (lodMat || lodArgs) retireGpuResources(engine, () => {
+				lodMat?.destroy();
+				lodCol?.destroy();
+				lodArgs?.destroy();
+			});
+			state._lodMatrixBuffer = null;
+			state._lodColorBuffer = null;
+			state._lodArgsBuffer = null;
+			state._lodIndexCount = -1;
+			state._lodBaseVertex = -1;
+			state._lodArgsZeroed = false;
+		}
+		state._lodActive = lod;
+		bumpVisibilityEpoch();
+	}
+	if (state._capacity < capacity) {
+		state._visibleMatrixBuffer?.destroy();
+		state._visibleColorBuffer?.destroy();
+		state._visibleMatrixBuffer = device.createBuffer({
+			size: Math.max(capacity * 64, 4),
+			usage: BU.VERTEX | BU.STORAGE
+		});
+		state._visibleColorBuffer = hasColor ? device.createBuffer({
+			size: Math.max(capacity * 16, 4),
+			usage: BU.VERTEX | BU.STORAGE
+		}) : null;
+		state._capacity = capacity;
+		state._bindGroup = null;
+		state._drawBuffers = null;
+		bumpVisibilityEpoch();
+	} else if (hasColor && !state._visibleColorBuffer) {
+		state._visibleColorBuffer = device.createBuffer({
+			size: Math.max(state._capacity * 16, 4),
+			usage: BU.VERTEX | BU.STORAGE
+		});
+		state._bindGroup = null;
+		state._drawBuffers = null;
+		bumpVisibilityEpoch();
+	}
+	if (lod && (!state._lodMatrixBuffer || state._lodMatrixBuffer.size < state._capacity * 64 || hasColor && !state._lodColorBuffer)) {
+		const oldMat = state._lodMatrixBuffer;
+		const oldCol = state._lodColorBuffer;
+		if (oldMat) retireGpuResources(engine, () => {
+			oldMat.destroy();
+			oldCol?.destroy();
+		});
+		state._lodMatrixBuffer = device.createBuffer({
+			size: Math.max(state._capacity * 64, 4),
+			usage: BU.VERTEX | BU.STORAGE
+		});
+		state._lodColorBuffer = hasColor ? device.createBuffer({
+			size: Math.max(state._capacity * 16, 4),
+			usage: BU.VERTEX | BU.STORAGE
+		}) : null;
+		state._bindGroup = null;
+		bumpVisibilityEpoch();
+	}
+	if (lod && !state._lodArgsBuffer) {
+		state._lodArgsBuffer = device.createBuffer({
+			size: INDIRECT_ARGS_BYTES,
+			usage: BU.INDIRECT | BU.STORAGE | BU.COPY_DST
+		});
+		state._lodIndexCount = -1;
+		state._lodBaseVertex = -1;
+		state._lodArgsZeroed = false;
+	}
+	if (!state._argsBuffer) {
+		state._argsBuffer = device.createBuffer({
+			size: INDIRECT_ARGS_BYTES,
+			usage: BU.INDIRECT | BU.STORAGE | BU.COPY_DST
+		});
+		state._indexCount = -1;
+		state._baseVertex = -1;
+	}
+	if (!state._paramsBuffer) state._paramsBuffer = device.createBuffer({
+		size: lod ? LOD_PARAM_BYTES : PARAM_BYTES,
+		usage: BU.UNIFORM | BU.COPY_DST
+	});
+}
+function getCullPipeline(engine, hasColor, lod) {
+	const device = engine._device;
+	if (_cachedDevice !== device) {
+		_cachedDevice = device;
+		_pipelineNoColor = null;
+		_pipelineColor = null;
+		_pipelineLodNoColor = null;
+		_pipelineLodColor = null;
+	}
+	if (lod) {
+		if (hasColor) {
+			_pipelineLodColor ??= device.createComputePipeline({
+				layout: "auto",
+				compute: {
+					module: device.createShaderModule({ code: CULL_WGSL_LOD_COLOR }),
+					entryPoint: "mainLodColor"
+				}
+			});
+			return _pipelineLodColor;
+		}
+		_pipelineLodNoColor ??= device.createComputePipeline({
+			layout: "auto",
+			compute: {
+				module: device.createShaderModule({ code: CULL_WGSL_LOD_NO_COLOR }),
+				entryPoint: "mainLod"
+			}
+		});
+		return _pipelineLodNoColor;
+	}
+	if (hasColor) {
+		_pipelineColor ??= device.createComputePipeline({
+			layout: "auto",
+			compute: {
+				module: device.createShaderModule({ code: CULL_WGSL_COLOR }),
+				entryPoint: "mainColor"
+			}
+		});
+		return _pipelineColor;
+	}
+	_pipelineNoColor ??= device.createComputePipeline({
+		layout: "auto",
+		compute: {
+			module: device.createShaderModule({ code: CULL_WGSL_NO_COLOR }),
+			entryPoint: "main"
+		}
+	});
+	return _pipelineNoColor;
+}
+function writeCullParams(engine, state, mesh, gpu, instanceCount, camera, aspect, lodMesh) {
+	const params = state._paramsF32;
+	writeFrustumPlanes(params, getViewProjectionMatrix(camera, aspect));
+	params.set(mesh.worldMatrix, MESH_WORLD_FLOAT_OFFSET);
+	params.set(state._localSphere, LOCAL_SPHERE_FLOAT_OFFSET);
+	state._paramsU32[COUNT_U32_OFFSET] = instanceCount;
+	params[BOUNDS_PAD_F32_OFFSET] = mesh.thinInstances?._cullBoundsPad ?? 0;
+	if (lodMesh) {
+		const cw = camera.worldMatrix;
+		params[CAM_POS_DIST_F32_OFFSET] = cw[12];
+		params[49] = cw[13];
+		params[50] = cw[14];
+		params[51] = mesh.thinInstances?._lodDistance ?? 0;
+		params[LOD_BAND_F32_OFFSET] = mesh.thinInstances?._lodBand ?? 0;
+	}
+	const baseVertex = gpu._baseVertex ?? 0;
+	if (state._indexCount !== gpu.indexCount || state._baseVertex !== baseVertex || state._firstIndex !== (gpu._firstIndex ?? 0)) {
+		const args = state._argsData;
+		writeMeshIndexedIndirectArgs(args, gpu, 0);
+		engine._device.queue.writeBuffer(state._argsBuffer, 0, args.buffer, args.byteOffset, args.byteLength);
+		state._indexCount = gpu.indexCount;
+		state._baseVertex = baseVertex;
+		state._firstIndex = gpu._firstIndex ?? 0;
+	} else engine._currentEncoder.clearBuffer(state._argsBuffer, 4, 4);
+	if (lodMesh) {
+		const lodGpu = lodMesh._gpu;
+		const lodIndexCount = lodGpu ? lodGpu.indexCount : 0;
+		const lodBaseVertex = lodGpu?._baseVertex ?? 0;
+		if (lodGpu && (state._lodIndexCount !== lodIndexCount || state._lodBaseVertex !== lodBaseVertex || state._lodFirstIndex !== (lodGpu._firstIndex ?? 0))) {
+			const args = state._argsData;
+			writeMeshIndexedIndirectArgs(args, lodGpu, 0);
+			engine._device.queue.writeBuffer(state._lodArgsBuffer, 0, args.buffer, args.byteOffset, args.byteLength);
+			state._lodIndexCount = lodIndexCount;
+			state._lodBaseVertex = lodBaseVertex;
+			state._lodFirstIndex = lodGpu._firstIndex ?? 0;
+		} else engine._currentEncoder.clearBuffer(state._lodArgsBuffer, 4, 4);
+		state._lodArgsZeroed = false;
+	}
+	engine._device.queue.writeBuffer(state._paramsBuffer, 0, state._paramsBytes, 0, lodMesh ? LOD_PARAM_BYTES : PARAM_BYTES);
+}
+function setCullActive(state, active) {
+	if (state._active !== active) {
+		state._active = active;
+		bumpVisibilityEpoch();
+	}
+}
+function writeFrustumPlanes(out, m) {
+	writePlane(out, 0, m[3] + m[0], m[7] + m[4], m[11] + m[8], m[15] + m[12]);
+	writePlane(out, 4, m[3] - m[0], m[7] - m[4], m[11] - m[8], m[15] - m[12]);
+	writePlane(out, 8, m[3] + m[1], m[7] + m[5], m[11] + m[9], m[15] + m[13]);
+	writePlane(out, 12, m[3] - m[1], m[7] - m[5], m[11] - m[9], m[15] - m[13]);
+	writePlane(out, 16, m[2], m[6], m[10], m[14]);
+	writePlane(out, 20, m[3] - m[2], m[7] - m[6], m[11] - m[10], m[15] - m[14]);
+}
+function writePlane(out, offset, x, y, z, w) {
+	const invLen = 1 / Math.hypot(x, y, z);
+	out[offset] = x * invLen;
+	out[offset + 1] = y * invLen;
+	out[offset + 2] = z * invLen;
+	out[offset + 3] = w * invLen;
+}
+function sameBounds(a, b) {
+	return a === b || !!a && !!b && a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
+}
+function copyBounds(source, previous, reuse) {
+	const copy = reuse && previous ? previous : [
+		0,
+		0,
+		0
+	];
+	copy[0] = source[0];
+	copy[1] = source[1];
+	copy[2] = source[2];
+	return copy;
+}
+function computeLocalSphere(mesh, out) {
+	const positions = mesh._cpuPositions;
+	let minX = Infinity, minY = Infinity, minZ = Infinity;
+	let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+	if (!positions || positions.length < 3) {
+		const min = mesh.boundMin;
+		const max = mesh.boundMax;
+		if (!min || !max) return false;
+		[minX, minY, minZ] = min;
+		[maxX, maxY, maxZ] = max;
+	} else for (let i = 0; i < positions.length; i += 3) {
+		const x = positions[i];
+		const y = positions[i + 1];
+		const z = positions[i + 2];
+		if (x < minX) minX = x;
+		if (x > maxX) maxX = x;
+		if (y < minY) minY = y;
+		if (y > maxY) maxY = y;
+		if (z < minZ) minZ = z;
+		if (z > maxZ) maxZ = z;
+	}
+	if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(minZ) || !Number.isFinite(maxX) || !Number.isFinite(maxY) || !Number.isFinite(maxZ) || minX > maxX || minY > maxY || minZ > maxZ) return false;
+	const cx = minX * .5 + maxX * .5;
+	const cy = minY * .5 + maxY * .5;
+	const cz = minZ * .5 + maxZ * .5;
+	const dx = maxX - cx;
+	const dy = maxY - cy;
+	const dz = maxZ - cz;
+	out[0] = cx;
+	out[1] = cy;
+	out[2] = cz;
+	out[3] = Math.hypot(dx, dy, dz);
+	return Number.isFinite(out[0]) && Number.isFinite(out[1]) && Number.isFinite(out[2]) && Number.isFinite(out[3]);
+}
+export { createTiCullState, destroyTiCullState, getComputeDispatchBatch, prepareTiCull, publishTiLodBucket };
+
+//# sourceMappingURL=thin-instance-gpu-culling.js.map

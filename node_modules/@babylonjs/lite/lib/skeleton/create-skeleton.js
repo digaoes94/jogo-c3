@@ -1,0 +1,67 @@
+import { U32 } from "../engine/typed-arrays.js";
+import { BU, TU } from "../engine/gpu-flags.js";
+import { createMappedBuffer } from "../resource/mapped-buffer.js";
+// src/skeleton/create-skeleton.ts
+/** Skeleton GPU resource factory.
+*
+*  Dynamically imported by load-gltf.ts when a mesh has skeletal data.
+*  Scenes without skeletons never import this module.
+*  Skinning WGSL is now provided by the skeleton ShaderFragment
+*  (shader/fragments/skeleton-fragment.ts) and composed at pipeline
+*  creation time — no global registration needed. */
+/** Create skeleton GPU data from parsed glTF skin.
+*  @param engine   - Engine context (provides GPUDevice)
+*  @param joints   - Joint indices (4 per vertex, u8 or u16)
+*  @param weights  - Blend weights (4 per vertex, f32)
+*  @param boneCount - Number of bones (joints) in the skeleton
+*  @param boneData  - Initial bone matrices (Float32Array, 16 floats per bone)
+*  @param joints1  - Extra joint indices for 8-bone skinning (JOINTS_1)
+*  @param weights1 - Extra blend weights for 8-bone skinning (WEIGHTS_1)
+*/
+function createSkeleton(engine, joints, weights, boneCount, boneData, joints1, weights1) {
+	const device = engine._device;
+	const texWidth = boneCount * 4;
+	const boneTexture = device.createTexture({
+		size: [texWidth, 1],
+		format: "rgba32float",
+		usage: TU.TEXTURE_BINDING | TU.COPY_DST
+	});
+	device.queue.writeTexture({ texture: boneTexture }, boneData.buffer, { bytesPerRow: texWidth * 16 }, {
+		width: texWidth,
+		height: 1
+	});
+	const joints32 = new U32(joints.length);
+	for (let i = 0; i < joints.length; i++) joints32[i] = joints[i];
+	const jointsBuffer = createMappedBuffer(engine, joints32, BU.VERTEX);
+	const weightsBuffer = createMappedBuffer(engine, weights, BU.VERTEX);
+	let joints1Buffer = null;
+	let weights1Buffer = null;
+	if (joints1 && weights1) {
+		const joints132 = new U32(joints1.length);
+		for (let i = 0; i < joints1.length; i++) joints132[i] = joints1[i];
+		joints1Buffer = createMappedBuffer(engine, joints132, BU.VERTEX);
+		weights1Buffer = createMappedBuffer(engine, weights1, BU.VERTEX);
+	}
+	return {
+		boneTexture,
+		boneCount,
+		jointsBuffer,
+		weightsBuffer,
+		joints,
+		weights,
+		boneMatrices: boneData,
+		joints1Buffer,
+		weights1Buffer,
+		joints1: joints1 ?? null,
+		weights1: weights1 ?? null,
+		_skinBuffers: {
+			jointsBuffer,
+			weightsBuffer,
+			joints1Buffer,
+			weights1Buffer
+		}
+	};
+}
+export { createSkeleton };
+
+//# sourceMappingURL=create-skeleton.js.map

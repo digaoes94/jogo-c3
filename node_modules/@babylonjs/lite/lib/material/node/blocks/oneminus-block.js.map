@@ -1,0 +1,1 @@
+{"version":3,"file":"oneminus-block.js","names":[],"sources":["../../../../../src/material/node/blocks/oneminus-block.ts"],"sourcesContent":["import { unaryEmitter } from \"./_math-factory.js\";\nexport const emitter = unaryEmitter(\"OneMinusBlock\", (v) => `1.0 - ${v}`);\n"],"mappings":";;AACA,IAAa,UAAU,aAAa,kBAAkB,MAAM,SAAS,GAAG"}

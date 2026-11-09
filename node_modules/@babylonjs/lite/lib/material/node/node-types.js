@@ -1,0 +1,13 @@
+// src/material/node/node-types.ts
+var WGSL = {
+	f32: "f32",
+	vec2f: "vec2<f32>",
+	vec3f: "vec3<f32>",
+	vec4f: "vec4<f32>",
+	mat4f: "mat4x4<f32>",
+	texture2d: "texture_2d<f32>",
+	textureCube: "texture_cube<f32>"
+};
+export { WGSL };
+
+//# sourceMappingURL=node-types.js.map

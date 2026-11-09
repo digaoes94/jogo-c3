@@ -1,0 +1,24 @@
+import { formatFloat } from "./_math-factory.js";
+// src/material/node/blocks/remap-block.ts
+function resolveOrSerialized(block, inputName, serializedKey, fallback, stage, state, ctx) {
+	if (block.inputs.get(inputName)?.source) return ctx.cast(ctx.resolve(block, inputName, stage, state), "f32").expr;
+	const raw = block.serialized[serializedKey];
+	return formatFloat(typeof raw === "number" ? raw : fallback);
+}
+var emitter = {
+	className: "RemapBlock",
+	emit(block, _outputName, stage, state, ctx) {
+		const input = ctx.resolve(block, "input", stage, state);
+		const sMin = resolveOrSerialized(block, "sourceMin", "sourceRange.x", -1, stage, state, ctx);
+		const sMax = resolveOrSerialized(block, "sourceMax", "sourceRange.y", 1, stage, state, ctx);
+		const tMin = resolveOrSerialized(block, "targetMin", "targetRange.x", 0, stage, state, ctx);
+		const tMax = resolveOrSerialized(block, "targetMax", "targetRange.y", 1, stage, state, ctx);
+		return {
+			expr: `(${tMin} + (${input.expr} - ${sMin}) * (${tMax} - ${tMin}) / (${sMax} - ${sMin}))`,
+			type: input.type
+		};
+	}
+};
+export { emitter };
+
+//# sourceMappingURL=remap-block.js.map

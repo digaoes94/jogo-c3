@@ -1,0 +1,1 @@
+{"version":3,"file":"subtract-block.js","names":[],"sources":["../../../../../src/material/node/blocks/subtract-block.ts"],"sourcesContent":["import { binaryEmitter } from \"./_math-factory.js\";\nexport const emitter = binaryEmitter(\"SubtractBlock\", (l, r) => `${l} - ${r}`);\n"],"mappings":";;AACA,IAAa,UAAU,cAAc,kBAAkB,GAAG,MAAM,GAAG,EAAE,KAAK,GAAG"}

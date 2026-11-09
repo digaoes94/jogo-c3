@@ -1,0 +1,41 @@
+import { createPostProcessTask } from "../frame-graph/post-process-task.js";
+// src/post-process/black-and-white.ts
+var BLACK_AND_WHITE_UNIFORM_WGSL = `struct BlackAndWhiteParams{degree:f32,p0:f32,p1:f32,p2:f32}@group(0)@binding(2)var<uniform>blackAndWhiteParams:BlackAndWhiteParams;`;
+var BLACK_AND_WHITE_FRAGMENT_WGSL = `fn applyPostProcess(color:vec4f,uv:vec2f)->vec4f{let luminance=dot(color.rgb,vec3f(0.3,0.59,0.11));let gray=vec3f(luminance);return vec4f(mix(color.rgb,gray,clamp(blackAndWhiteParams.degree,0,1)),color.a);}`;
+/**
+* Create a post-process task that blends the image toward grayscale.
+* @param config - Source/target settings and desaturation `degree`.
+* @param engine - The owning engine.
+* @param scene - Optional owning scene. Omit for scene-less standalone frame graphs.
+* @returns The black-and-white post-process task.
+*/
+function createBlackAndWhitePostProcessTask(config, engine, scene) {
+	const params = { degree: config.degree ?? 1 };
+	const task = createPostProcessTask({
+		name: config.name ?? "black-and-white",
+		sourceTexture: config.sourceTexture,
+		sourceSamplingMode: config.sourceSamplingMode,
+		targetTexture: config.targetTexture,
+		alphaMode: config.alphaMode,
+		viewport: config.viewport,
+		clear: config.clear,
+		_shader: {
+			uniformWGSL: BLACK_AND_WHITE_UNIFORM_WGSL,
+			uniformByteLength: 16,
+			writeUniforms(data) {
+				data[0] = params.degree;
+			},
+			fragmentWGSL: BLACK_AND_WHITE_FRAGMENT_WGSL
+		}
+	}, engine, scene);
+	Object.defineProperty(task, "degree", {
+		get: () => params.degree,
+		set: (value) => {
+			params.degree = value;
+		}
+	});
+	return task;
+}
+export { createBlackAndWhitePostProcessTask };
+
+//# sourceMappingURL=black-and-white.js.map

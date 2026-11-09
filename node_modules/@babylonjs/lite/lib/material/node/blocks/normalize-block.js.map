@@ -1,0 +1,1 @@
+{"version":3,"file":"normalize-block.js","names":[],"sources":["../../../../../src/material/node/blocks/normalize-block.ts"],"sourcesContent":["import { unaryEmitter } from \"./_math-factory.js\";\nexport const emitter = unaryEmitter(\"NormalizeBlock\", (v) => `normalize(${v})`);\n"],"mappings":";;AACA,IAAa,UAAU,aAAa,mBAAmB,MAAM,aAAa,EAAE,EAAE"}

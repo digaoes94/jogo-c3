@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jogo de Cartas 3x3</title>
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- PAINEL ESQUERDO (Botão e Regras) -->
+    <div class="painel-esquerdo">
+      <button id="btn-nova-partida" class="hidden">Nova Partida</button>
+      
+      <div class="regras">
+        <h3>Como Jogar</h3>
+        <ul>
+          <li><strong>Posicionamento:</strong> escolha 6 cartas e as posicione no seu tabuleiro (lado azul) clicando na carta e então na posição.</li>
+          <li><strong>Primeiro a Jogar:</strong> quem terá o 1° turno é selecionado de forma aleatória, e então torna-se alternado.</li>
+          <li><strong>Guerreiros:</strong> só podem ser posicionados na Linha da Frente (1ª linha do seu território que encontra com o território inimigo).</li>
+          <li><strong>Batalha:</strong> clique numa carta sua e então selecione um alvo válido.</li>
+          <li><strong>Movimento (Verde):</strong> clique numa carta sua e então num espaço verde para mover. Caso a carta seja movida, ela não pode atacar.</li>
+          <li><strong>Cemitério:</strong> suas cartas derrotadas aparecem à esquerda do seu território.</li> 
+          <li><strong>Condição de Vitória:</strong> elimine todas as cartas do oponente.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- PAINEL CENTRAL (Tabuleiro) -->
+    <div class="painel-centro">
+      <div class="tabuleiro">
+        <div class="lado pc">
+          <h2>Computador</h2>
+          <div class="arena">
+            <div id="cemiterio-pc" class="cemiterio"></div>
+            <div class="grid-tabuleiro" id="grid-pc"></div>
+          </div>
+        </div>
+
+        <div class="lado humano">
+          <h2>Você</h2>
+          <div class="arena">
+            <div id="cemiterio-hu" class="cemiterio"></div>
+            <div class="grid-tabuleiro" id="grid-hu"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAINEL DIREITO (Mão do Jogador) -->
+    <div class="painel-direito">
+      <div id="mao-humano">
+        <h2>Sua Mão</h2>
+        <p class="subtitulo">Selecione 6 cartas</p>
+        <div id="cartas-mao"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE FIM DE JOGO -->
+  <div id="modal-fim-jogo" class="modal-overlay hidden">
+    <div class="modal-conteudo">
+      <h2 id="modal-titulo">Fim de Jogo!</h2>
+      <p id="modal-mensagem"></p>
+      <div class="modal-botoes">
+        <button id="btn-jogar-novamente">Jogar de Novo</button>
+        <button id="btn-agora-nao">Agora não</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

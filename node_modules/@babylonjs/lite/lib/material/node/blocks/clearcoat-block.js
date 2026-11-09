@@ -1,0 +1,15 @@
+// src/material/node/blocks/clearcoat-block.ts
+var emitter = {
+	className: "ClearCoatBlock",
+	stage: "fragment",
+	emit(_block, _outputName, _stage, state, _ctx) {
+		state.usesClearcoat = true;
+		return {
+			expr: `vec3<f32>(0.0)`,
+			type: "vec3f"
+		};
+	}
+};
+export { emitter };
+
+//# sourceMappingURL=clearcoat-block.js.map
