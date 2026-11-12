@@ -56,9 +56,8 @@ export class Carta {
   // GETTER MOVIDO PARA CÁ (Abaixo do aplicarElemento)
   // Assim, quando a imagem for buscada, o this.elemento já estará preenchido.
     get caminhoImagem() {
-    const classe = this.constructor.name.toLowerCase();
-    const elemento = this.elemento ? this.elemento.toLowerCase() : '';
-    return `/img/${classe}-${elemento}.jpeg`; // <--- Barra no início!
+    const base = import.meta.env.BASE_URL; // Pega o '/jogo-c3/' automaticamente
+    return `${base}${this.imagem}`; // Retorna ex: '/jogo-c3/img/mago-fogo.jpeg'
   }
 }
 
@@ -66,24 +65,24 @@ export class Carta {
 
 export class Guerreiro extends Carta {
   constructor(elemento) {
-    // Vida 12, Guarda 1, Ataque 4, Alcance 1 (Regra original)
     super(`Guerreiro de ${elemento}`, 12, 1, 4, 1); 
     this.aplicarElemento(elemento);
+    this.imagem = `img/guerreiro-${elemento.toLowerCase()}.jpeg`; // Fixa o nome!
   }
 }
 
 export class Arqueiro extends Carta {
   constructor(elemento) {
-    // Vida 10, Guarda 2, Ataque 5, Alcance 3 (Regra original)
     super(`Arqueiro de ${elemento}`, 10, 2, 5, 3); 
     this.aplicarElemento(elemento);
+    this.imagem = `img/arqueiro-${elemento.toLowerCase()}.jpeg`; // Fixa o nome!
   }
 }
 
 export class Mago extends Carta {
   constructor(elemento) {
-    // Vida 8, Guarda 0, Ataque 6, Alcance 3 (Regra original)
     super(`Mago de ${elemento}`, 8, 0, 6, 3); 
     this.aplicarElemento(elemento);
+    this.imagem = `img/mago-${elemento.toLowerCase()}.jpeg`; // Fixa o nome!
   }
 }
