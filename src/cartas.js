@@ -65,7 +65,7 @@ export class Carta {
 
 export class Guerreiro extends Carta {
   constructor(elemento) {
-    super(`Guerreiro de ${elemento}`, 12, 2, 4, 1); 
+    super(`Guerreiro de ${elemento}`, 12, 2, 5, 1); 
     this.aplicarElemento(elemento);
     this.imagem = `img/guerreiro-${elemento.toLowerCase()}.jpeg`; // Fixa o nome!
   }
@@ -73,7 +73,7 @@ export class Guerreiro extends Carta {
 
 export class Arqueiro extends Carta {
   constructor(elemento) {
-    super(`Arqueiro de ${elemento}`, 10, 1, 5, 3); 
+    super(`Arqueiro de ${elemento}`, 10, 1, 6, 3); 
     this.aplicarElemento(elemento);
     this.imagem = `img/arqueiro-${elemento.toLowerCase()}.jpeg`; // Fixa o nome!
   }
@@ -81,7 +81,7 @@ export class Arqueiro extends Carta {
 
 export class Mago extends Carta {
   constructor(elemento) {
-    super(`Mago de ${elemento}`, 8, 0, 6, 3); 
+    super(`Mago de ${elemento}`, 8, 0, 7, 3); 
     this.aplicarElemento(elemento);
     this.imagem = `img/mago-${elemento.toLowerCase()}.jpeg`; // Fixa o nome!
   }
