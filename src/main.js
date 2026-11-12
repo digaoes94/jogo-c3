@@ -244,101 +244,108 @@ async function turnoPC() {
   if (faseJogo !== 'BATALHA') return;
   console.log("🤖 Turno do PC iniciado.");
   
-  const cartasPCIds = Object.keys(cartasPosicionadasPC);
+  try {
+    const cartasPCIds = Object.keys(cartasPosicionadasPC);
 
-  for (let slotId of cartasPCIds) {
-    const cartaPC = cartasPosicionadasPC[slotId];
-    if (!cartaPC || !cartaPC.estaViva || cartaPC.jaAgiu) continue;
+    for (let slotId of cartasPCIds) {
+      const cartaPC = cartasPosicionadasPC[slotId];
+      if (!cartaPC || !cartaPC.estaViva || cartaPC.jaAgiu) continue;
 
-    const slotAtualPC = SLOTS[slotId];
-    let alvoEncontrado = null;
+      const slotAtualPC = SLOTS[slotId];
+      let alvoEncontrado = null;
 
-    for (let slotHUId of Object.keys(cartasPosicionadasHumano)) {
-      const cartaHU = cartasPosicionadasHumano[slotHUId];
-      if (!cartaHU.estaViva) continue;
-      
-      if (podeAtacar(cartaPC, slotAtualPC, cartaHU, SLOTS[slotHUId])) {
-        alvoEncontrado = { slotId: slotHUId, carta: cartaHU };
-        break; 
-      }
-    }
-
-    if (alvoEncontrado) {
-      console.log(`⚔️ PC: ${cartaPC.nome} atacou ${alvoEncontrado.carta.nome}`);
-      cartaPC.atacar(alvoEncontrado.carta);
-      processarCartasMortas(); 
-    } 
-    else {
-      const movimentosValidos = [];
-      
-      Object.values(SLOTS).forEach(slotDestino => {
-        const isSlotOcupado = cartasPosicionadasPC[slotDestino.id] || cartasPosicionadasHumano[slotDestino.id];
+      for (let slotHUId of Object.keys(cartasPosicionadasHumano)) {
+        const cartaHU = cartasPosicionadasHumano[slotHUId];
+        if (!cartaHU.estaViva) continue;
         
-        if (!isSlotOcupado && calcularDistancia(slotAtualPC, slotDestino) === 1) {
-          movimentosValidos.push(slotDestino);
+        if (podeAtacar(cartaPC, slotAtualPC, cartaHU, SLOTS[slotHUId])) {
+          alvoEncontrado = { slotId: slotHUId, carta: cartaHU };
+          break; 
         }
-      });
+      }
 
-      if (movimentosValidos.length > 0) {
-        let melhorMovimento = null;
-        let menorDistanciaInimigo = 99;
-
-        Object.keys(cartasPosicionadasHumano).forEach(slotHUId => {
-          if (!cartasPosicionadasHumano[slotHUId].estaViva) return;
-          const dist = calcularDistancia(slotAtualPC, SLOTS[slotHUId]);
-          if (dist < menorDistanciaInimigo) menorDistanciaInimigo = dist;
-        });
-
-        movimentosValidos.forEach(slotDestino => {
-          let minDistDestino = 99;
-          Object.keys(cartasPosicionadasHumano).forEach(slotHUId => {
-            if (!cartasPosicionadasHumano[slotHUId].estaViva) return;
-            const dist = calcularDistancia(slotDestino, SLOTS[slotHUId]);
-            if (dist < minDistDestino) minDistDestino = dist;
-          });
-
-          if (minDistDestino < menorDistanciaInimigo) {
-            menorDistanciaInimigo = minDistDestino;
-            melhorMovimento = slotDestino;
-          } else if (minDistDestino === menorDistanciaInimigo) {
-            const isGuerreiro = cartaPC instanceof Guerreiro;
-            if (isGuerreiro) {
-              if (melhorMovimento === null || slotDestino.linha > melhorMovimento.linha) {
-                melhorMovimento = slotDestino;
-              }
-            } else {
-              if (melhorMovimento === null || slotDestino.linha < melhorMovimento.linha) {
-                melhorMovimento = slotDestino;
-              }
-            }
+      if (alvoEncontrado) {
+        console.log(`⚔️ PC: ${cartaPC.nome} atacou ${alvoEncontrado.carta.nome}`);
+        cartaPC.atacar(alvoEncontrado.carta);
+        processarCartasMortas(); 
+      } 
+      else {
+        const movimentosValidos = [];
+        
+        Object.values(SLOTS).forEach(slotDestino => {
+          const isSlotOcupado = cartasPosicionadasPC[slotDestino.id] || cartasPosicionadasHumano[slotDestino.id];
+          
+          if (!isSlotOcupado && calcularDistancia(slotAtualPC, slotDestino) === 1) {
+            movimentosValidos.push(slotDestino);
           }
         });
 
-        if (melhorMovimento) {
-          console.log(`🏃 PC moveu ${cartaPC.nome} para ${melhorMovimento.id}`);
-          delete cartasPosicionadasPC[slotId];
-          cartasPosicionadasPC[melhorMovimento.id] = cartaPC;
-        }
-      } else {
-        console.log(`🤖 PC: ${cartaPC.nome} não encontrou alvo nem espaço.`);
-      }
-    }
-    
-    cartaPC.jaAgiu = true;
-    atualizarTela(); 
-    await new Promise(r => setTimeout(r, 800)); 
-  }
+        if (movimentosValidos.length > 0) {
+          let melhorMovimento = null;
+          let menorDistanciaInimigo = 99;
 
-  processarCartasMortas();
-  checarFimDeJogo();
-  if (faseJogo === 'FIM') return;
-  
-  setTimeout(() => {
-    turnoAtual = 'HU';
-    resetarAcoes(cartasPosicionadasHumano);
-    atualizarTela();
-    console.log("Sua vez.");
-  }, 1000);
+          Object.keys(cartasPosicionadasHumano).forEach(slotHUId => {
+            if (!cartasPosicionadasHumano[slotHUId].estaViva) return;
+            const dist = calcularDistancia(slotAtualPC, SLOTS[slotHUId]);
+            if (dist < menorDistanciaInimigo) menorDistanciaInimigo = dist;
+          });
+
+          movimentosValidos.forEach(slotDestino => {
+            let minDistDestino = 99;
+            Object.keys(cartasPosicionadasHumano).forEach(slotHUId => {
+              if (!cartasPosicionadasHumano[slotHUId].estaViva) return;
+              const dist = calcularDistancia(slotDestino, SLOTS[slotHUId]);
+              if (dist < minDistDestino) minDistDestino = dist;
+            });
+
+            if (minDistDestino < menorDistanciaInimigo) {
+              menorDistanciaInimigo = minDistDestino;
+              melhorMovimento = slotDestino;
+            } else if (minDistDestino === menorDistanciaInimigo) {
+              const isGuerreiro = cartaPC instanceof Guerreiro;
+              if (isGuerreiro) {
+                if (melhorMovimento === null || slotDestino.linha > melhorMovimento.linha) {
+                  melhorMovimento = slotDestino;
+                }
+              } else {
+                if (melhorMovimento === null || slotDestino.linha < melhorMovimento.linha) {
+                  melhorMovimento = slotDestino;
+                }
+              }
+            }
+          });
+
+          if (melhorMovimento) {
+            console.log(`🏃 PC moveu ${cartaPC.nome} para ${melhorMovimento.id}`);
+            delete cartasPosicionadasPC[slotId];
+            cartasPosicionadasPC[melhorMovimento.id] = cartaPC;
+          }
+        } else {
+          console.log(`🤖 PC: ${cartaPC.nome} não encontrou alvo nem espaço.`);
+        }
+      }
+      
+      cartaPC.jaAgiu = true;
+      atualizarTela(); 
+      await new Promise(r => setTimeout(r, 800)); 
+    }
+
+    processarCartasMortas();
+    checarFimDeJogo();
+  } catch (error) {
+    console.error("Erro no turno do PC:", error);
+  } finally {
+    // ISSO GARANTE QUE A VEZ VOLTE PARA O HUMANO, MESMO SE DER ERRO
+    if (faseJogo !== 'FIM') {
+      setTimeout(() => {
+        turnoAtual = 'HU';
+        resetarAcoes(cartasPosicionadasHumano);
+        resetarAcoes(cartasPosicionadasPC); // Reseta o PC também por segurança
+        atualizarTela();
+        console.log("Sua vez.");
+      }, 1000);
+    }
+  }
 }
 
 function checarFimDeJogo() {
@@ -387,10 +394,15 @@ function atualizarTela() {
     pcPosicionarCartas();
     faseJogo = 'BATALHA';
     turnoAtual = Math.random() < 0.5 ? 'HU' : 'PC';
+    
+    // GARANTA QUE ESTAS DUAS LINHAS ESTEJAM AQUI:
+    resetarAcoes(cartasPosicionadasHumano); 
+    resetarAcoes(cartasPosicionadasPC);
+
     alert(`Posicionamento concluído! O ${turnoAtual === 'HU' ? 'VOCÊ' : 'PC'} começa.`);
+    
     atualizarTela();
     if (turnoAtual === 'PC') {
-      resetarAcoes(cartasPosicionadasPC);
       setTimeout(turnoPC, 1000);
     }
   }
