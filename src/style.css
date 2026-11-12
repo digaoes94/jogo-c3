@@ -106,12 +106,15 @@ h2 { font-size: clamp(14px, 1.2vw, 22px); margin-bottom: 1vh; color: #ccc; text-
 .slot:hover { background-color: #444; }
 
 .carta {
-  background-color: #444; border: 1px solid #aaa;
-  padding: 0.5vh; border-radius: 5px; 
-  font-size: clamp(9px, 0.8vw, 13px);
+  background-color: #444; 
+  border: 1px solid #aaa;
+  border-radius: 5px; 
   width: 100%; height: 100%;
-  display: flex; flex-direction: column; justify-content: center; align-items: center;
-  text-align: center;
+  display: flex; flex-direction: column; justify-content: flex-end; align-items: center;
+  background-size: cover; /* Faz a imagem preencher todo o espaço */
+  background-position: center top;
+  position: relative;
+  overflow: hidden;
 }
 .pc-card { border-color: #e74c3c; background-color: #4a1c1c; }
 
@@ -136,13 +139,20 @@ h2 { font-size: clamp(14px, 1.2vw, 22px); margin-bottom: 1vh; color: #ccc; text-
 }
 
 .carta-na-mao {
-  background-color: #333; border: 2px solid #555; padding: 1.5vh 1vw;
+  background-color: #333; 
+  border: 2px solid #555; 
+  padding: 0; /* Removemos o padding para a imagem colar nas bordas */
   cursor: pointer; border-radius: 8px; 
   width: 100%; 
+  min-height: 12vh; /* Altura mínima para a imagem aparecer */
   transition: all 0.2s; 
-  font-size: clamp(10px, 0.9vw, 14px);
   position: relative; 
   flex-shrink: 0;
+  
+  background-size: cover; 
+  background-position: center top;
+  display: flex;
+  align-items: flex-end; /* Joga o texto para baixo */
 }
 .carta-na-mao:hover { background-color: #444; border-color: #888; }
 .carta-na-mao.selecionada { border-color: #f1c40f; background-color: #6e5a13; transform: scale(1.02); box-shadow: 0 0 10px #f1c40f; }
@@ -194,3 +204,24 @@ h2 { font-size: clamp(14px, 1.2vw, 22px); margin-bottom: 1vh; color: #ccc; text-
 #btn-jogar-novamente:hover { background-color: #2980b9; }
 #btn-agora-nao { background-color: #7f8c8d; color: white; }
 #btn-agora-nao:hover { background-color: #95a5a6; }
+
+.status-carta {
+  background-color: rgba(0, 0, 0, 0.75);
+  width: 100%;
+  text-align: center;
+  font-size: clamp(8px, 0.7vw, 12px);
+  padding: 2px 0;
+  font-weight: bold;
+  color: #fff;
+  z-index: 2;
+}
+
+.status-carta-mao {
+  background-color: rgba(0, 0, 0, 0.8);
+  width: 100%;
+  padding: 5px;
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
+  font-size: clamp(10px, 0.9vw, 14px);
+  color: #fff;
+}

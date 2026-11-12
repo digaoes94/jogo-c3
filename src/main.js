@@ -2,7 +2,7 @@
 import { Guerreiro, Arqueiro, Mago, ELEMENTOS } from './cartas.js';
 import { SLOTS, podeAtacar, calcularDistancia } from './estado.js'; 
 
-console.log("✅ Jogo Iniciado - Modo Invasão 3x3.");
+console.log("✅ Jogo Iniciado - Modo Invasão 3x3 com Imagens.");
 
 const baralhoHumano = [
   new Guerreiro(ELEMENTOS.FOGO), new Guerreiro(ELEMENTOS.GELO), new Guerreiro(ELEMENTOS.TERRA),
@@ -16,7 +16,6 @@ const baralhoPC = [
   new Mago(ELEMENTOS.FOGO), new Mago(ELEMENTOS.GELO), new Mago(ELEMENTOS.TERRA)
 ];
 
-// NOVO: Definir o dono de cada baralho
 baralhoHumano.forEach(c => c.dono = 'HU');
 baralhoPC.forEach(c => c.dono = 'PC');
 
@@ -65,25 +64,25 @@ function renderizarTabuleiro() {
     const cartaHU = cartasPosicionadasHumano[slotInfo.id];
     const cartaPC = cartasPosicionadasPC[slotInfo.id];
 
+    // --- DESENHA CARTA DO HUMANO ---
     if (cartaHU) {
       const classeAgiu = cartaHU.jaAgiu ? 'ja-agiu' : '';
       const classeAlvo = (cartaSelecionadaTabuleiro && cartaSelecionadaTabuleiro.carta === cartaHU) ? 'selecionada-no-tabuleiro' : '';
       
       divSlot.innerHTML = `
-        <div class="carta ${classeAgiu} ${classeAlvo}">
-          <div style="font-weight: bold; font-size: 11px; margin-bottom: 2px;">${cartaHU.nome}</div>
-          <div style="font-size: 10px;">❤️${cartaHU.vida} ⚔️${cartaHU.ataque} 🛡️${cartaHU.guarda}</div>
+        <div class="carta ${classeAgiu} ${classeAlvo}" style="background-image: url('${cartaHU.caminhoImagem}');">
+          <div class="status-carta">❤️${cartaHU.vida} ⚔️${cartaHU.ataque} 🛡️${cartaHU.guarda}</div>
         </div>`;
       
       if (faseJogo === 'BATALHA' && turnoAtual === 'HU') {
         divSlot.onclick = () => selecionarCartaNoTabuleiro(slotInfo, cartaHU);
       }
     } 
+    // --- DESENHA CARTA DO PC ---
     else if (cartaPC) {
       divSlot.innerHTML = `
-        <div class="carta pc-card">
-          <div style="font-weight: bold; font-size: 11px; margin-bottom: 2px;">${cartaPC.nome}</div>
-          <div style="font-size: 10px;">❤️${cartaPC.vida} ⚔️${cartaPC.ataque} 🛡️${cartaPC.guarda}</div>
+        <div class="carta pc-card" style="background-image: url('${cartaPC.caminhoImagem}');">
+          <div class="status-carta">❤️${cartaPC.vida} ⚔️${cartaPC.ataque} 🛡️${cartaPC.guarda}</div>
         </div>`;
         
       if (faseJogo === 'BATALHA' && turnoAtual === 'HU' && cartaSelecionadaTabuleiro) {
@@ -94,8 +93,8 @@ function renderizarTabuleiro() {
         }
       }
     } 
+    // --- SLOTS VAZIOS ---
     else {
-      // Slot vazio
       if (faseJogo === 'POSICIONAMENTO') {
         if (slotInfo.lado === 'PC') {
           divSlot.innerText = 'Vazio'; 
@@ -110,7 +109,6 @@ function renderizarTabuleiro() {
           }
         }
       } else if (faseJogo === 'BATALHA' && turnoAtual === 'HU' && cartaSelecionadaTabuleiro) {
-        // MUDANÇA AQUI: Permite movimento para QUALQUER slot vazio adjacente (invadindo o PC)
         const dist = calcularDistancia(cartaSelecionadaTabuleiro.slot, slotInfo);
         if (dist === 1) {
           divSlot.classList.add('movimento-valido');
@@ -144,9 +142,16 @@ function renderizarMao() {
 
   baralhoHumano.forEach((carta) => {
     if (Object.values(cartasPosicionadasHumano).some(c => c === carta)) return;
+    
     const divCarta = document.createElement('div');
     divCarta.className = 'carta-na-mao';
-    divCarta.innerHTML = `<strong>${carta.nome}</strong><br>❤️ ${carta.vida} | 🛡️ ${carta.guarda} | ⚔️ ${carta.ataque}`;
+    divCarta.style.backgroundImage = `url('${carta.caminhoImagem}')`; 
+    divCarta.innerHTML = `
+      <div class="status-carta-mao">
+        <strong>${carta.nome}</strong><br>
+        ❤️ ${carta.vida} | 🛡️ ${carta.guarda} | ⚔️ ${carta.ataque}
+      </div>
+    `;
     
     divCarta.onclick = () => {
       document.querySelectorAll('.carta-na-mao').forEach(el => el.classList.remove('selecionada'));
@@ -248,7 +253,6 @@ async function turnoPC() {
     const slotAtualPC = SLOTS[slotId];
     let alvoEncontrado = null;
 
-    // Tenta atacar
     for (let slotHUId of Object.keys(cartasPosicionadasHumano)) {
       const cartaHU = cartasPosicionadasHumano[slotHUId];
       if (!cartaHU.estaViva) continue;
@@ -268,7 +272,6 @@ async function turnoPC() {
       const movimentosValidos = [];
       
       Object.values(SLOTS).forEach(slotDestino => {
-        // NOVO: Permite movimento para qualquer slot, desde que esteja TOTALMENTE vazio
         const isSlotOcupado = cartasPosicionadasPC[slotDestino.id] || cartasPosicionadasHumano[slotDestino.id];
         
         if (!isSlotOcupado && calcularDistancia(slotAtualPC, slotDestino) === 1) {
@@ -298,7 +301,6 @@ async function turnoPC() {
             menorDistanciaInimigo = minDistDestino;
             melhorMovimento = slotDestino;
           } else if (minDistDestino === menorDistanciaInimigo) {
-            // TIE-BREAKER TÁTICO
             const isGuerreiro = cartaPC instanceof Guerreiro;
             if (isGuerreiro) {
               if (melhorMovimento === null || slotDestino.linha > melhorMovimento.linha) {
@@ -339,8 +341,6 @@ async function turnoPC() {
   }, 1000);
 }
 
-// ... (seu código anterior) ...
-
 function checarFimDeJogo() {
   const vivosHU = Object.keys(cartasPosicionadasHumano).length;
   const vivosPC = Object.keys(cartasPosicionadasPC).length;
@@ -355,39 +355,29 @@ function checarFimDeJogo() {
   }
 }
 
-// NOVA FUNÇÃO: Mostra o Modal Bonito
 function mostrarModalFimDeJogo(mensagem) {
   document.getElementById('modal-mensagem').innerText = mensagem;
   document.getElementById('modal-fim-jogo').classList.remove('hidden');
 }
 
-// FUNÇÃO "AGORA NÃO"
 document.getElementById('btn-agora-nao').onclick = () => {
-  // 1. Esconde o modal
   document.getElementById('modal-fim-jogo').classList.add('hidden');
   
-  // 2. Limpa os tabuleiros e cemitérios para ficarem vazios
   for (let k in cartasPosicionadasHumano) delete cartasPosicionadasHumano[k];
   for (let k in cartasPosicionadasPC) delete cartasPosicionadasPC[k];
   cemiterioHumano.length = 0;
   cemiterioPC.length = 0;
   
-  // 3. Redesenha a tela (agora vazia)
   atualizarTela();
-  
-  // 4. Mostra o botão "Nova Partida" na esquerda
   document.getElementById('btn-nova-partida').classList.remove('hidden');
 };
 
-// FUNÇÃO "JOGAR NOVAMENTE" / "NOVA PARTIDA"
 function iniciarNovaPartida() {
   window.location.reload();
 }
 
 document.getElementById('btn-jogar-novamente').onclick = iniciarNovaPartida;
 document.getElementById('btn-nova-partida').onclick = iniciarNovaPartida;
-
-// ... (seu código continua igual daqui pra baixo: atualizarTela, pcPosicionarCartas, etc.) ...
 
 function atualizarTela() {
   renderizarTabuleiro();

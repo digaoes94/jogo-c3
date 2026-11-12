@@ -14,11 +14,11 @@ export class Carta {
     this.vida = vida;
     this.guarda = guarda;
     this.ataqueBase = ataque;
-    this.alcance = alcance; // 1 para corpo a corpo, 3 para distância
+    this.alcance = alcance; 
     
-    // Controle de turno (para a futura regra de movimento)
     this.jaAgiu = false;
     this.dono = null; 
+    // O this.elemento será definido no aplicarElemento()
   }
 
   get ataque() {
@@ -29,7 +29,6 @@ export class Carta {
     return this.vida > 0;
   }
 
-  // A regra da guarda: ela reduz o dano bruto de cada ataque
   receberDano(danoBruto) {
     const danoReal = Math.max(0, danoBruto - this.guarda);
     this.vida = Math.max(0, this.vida - danoReal);
@@ -47,36 +46,44 @@ export class Carta {
     if (elemento === ELEMENTOS.FOGO) {
       this.ataqueBase += 2;
     } else if (elemento === ELEMENTOS.GELO) {
-      this.guarda += 2; // CORRIGIDO: Agora o Gelo dá +2 de guarda conforme a regra original
+      this.guarda += 2; 
     } else if (elemento === ELEMENTOS.TERRA) {
       this.vida += 2;
       this.vidaMax += 2;
     }
   }
+
+  // GETTER MOVIDO PARA CÁ (Abaixo do aplicarElemento)
+  // Assim, quando a imagem for buscada, o this.elemento já estará preenchido.
+  get caminhoImagem() {
+    const classe = this.constructor.name.toLowerCase();
+    const elemento = this.elemento ? this.elemento.toLowerCase() : '';
+    return `/img/${classe}-${elemento}.jpeg`; 
+  }
 }
 
-// --- CLASSES CONCRETAS COM ATRIBUTOS ATUALIZADOS ---
+// --- CLASSES CONCRETAS ---
 
 export class Guerreiro extends Carta {
   constructor(elemento) {
-    // Vida 12, Guarda 1, ATAQUE 5, Alcance 1
-    super(`Guerreiro de ${elemento}`, 12, 2, 5, 1); 
+    // Vida 12, Guarda 1, Ataque 4, Alcance 1 (Regra original)
+    super(`Guerreiro de ${elemento}`, 12, 1, 4, 1); 
     this.aplicarElemento(elemento);
   }
 }
 
 export class Arqueiro extends Carta {
   constructor(elemento) {
-    // Vida 10, Guarda 2, ATAQUE 6, Alcance 3
-    super(`Arqueiro de ${elemento}`, 10, 1, 6, 3); 
+    // Vida 10, Guarda 2, Ataque 5, Alcance 3 (Regra original)
+    super(`Arqueiro de ${elemento}`, 10, 2, 5, 3); 
     this.aplicarElemento(elemento);
   }
 }
 
 export class Mago extends Carta {
   constructor(elemento) {
-    // Vida 8, Guarda 0, ATAQUE 7, Alcance 3
-    super(`Mago de ${elemento}`, 8, 0, 7, 3); 
+    // Vida 8, Guarda 0, Ataque 6, Alcance 3 (Regra original)
+    super(`Mago de ${elemento}`, 8, 0, 6, 3); 
     this.aplicarElemento(elemento);
   }
 }
