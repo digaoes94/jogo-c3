@@ -55,10 +55,10 @@ export class Carta {
 
   // GETTER MOVIDO PARA CÁ (Abaixo do aplicarElemento)
   // Assim, quando a imagem for buscada, o this.elemento já estará preenchido.
-  get caminhoImagem() {
+    get caminhoImagem() {
     const classe = this.constructor.name.toLowerCase();
     const elemento = this.elemento ? this.elemento.toLowerCase() : '';
-    return `/img/${classe}-${elemento}.jpeg`; 
+    return `/img/${classe}-${elemento}.jpeg`; // <--- Barra no início!
   }
 }
 
